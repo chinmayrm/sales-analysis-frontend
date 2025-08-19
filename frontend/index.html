@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sales Trend Analyzer</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+*{box-sizing:border-box}
+:root{
+  --bg:#0b1220;--panel:#111a2b;--muted:#9fb0d3;--border:#243047;--brand:#4c86ff;--text:#e6eefb
+}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.container{max-width:1080px;margin:24px auto;padding:0 16px}
+h1{margin:8px 0 16px;font-size:28px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.card h2{margin:0 0 12px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+input[type="file"],input[type="text"]{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:10px}
+button{background:var(--brand);color:#fff;border:none;padding:10px 16px;border-radius:10px;cursor:pointer}
+button:hover{opacity:.9}
+small{color:var(--muted)}
+pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--border);padding:12px;border-radius:10px;max-height:200px;overflow:auto}
+.grid{display:grid;grid-template-columns:1fr;gap:12px}
+@media(min-width:900px){.grid{grid-template-columns:1fr 1fr}}
+.panel{padding:8px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
+canvas{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px;height:360px}
+.table{width:100%;border-collapse:collapse;background:var(--bg);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table th,.table td{padding:10px;border-bottom:1px solid var(--border);text-align:left}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#1f2b45;border:1px solid var(--border);color:var(--text);font-size:12px}
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sales Trend Analyzer</h1>
+    <p>Upload your sales CSV, train a model, then analyze new data. Required columns: <code>date</code>, <code>price</code>, <code>units</code> (names can be auto-detected or provided below). Optional: <code>product_id</code>/<code>product_name</code>, <code>rating</code>.</p>
+
+    <div class="card">
+      <h2>1) Train Model</h2>
+      <div class="row">
+        <input type="file" id="trainFile" accept=".csv" />
+        <input type="text" id="dateCol" placeholder="date_col (optional)"/>
+        <input type="text" id="priceCol" placeholder="price_col (optional)"/>
+        <input type="text" id="unitsCol" placeholder="units_col (optional)"/>
+        <input type="text" id="pidCol" placeholder="product_id_col (optional)"/>
+        <input type="text" id="pnameCol" placeholder="product_name_col (optional)"/>
+        <input type="text" id="ratingCol" placeholder="rating_col (optional)"/>
+        <button id="trainBtn">Train</button>
+      </div>
+      <small>Tip: If you leave columns blank, the backend will try to auto-detect.</small>
+      <pre id="trainResult"></pre>
+    </div>
+
+    <div class="card">
+      <h2>2) Analyze New Data</h2>
+      <div class="row">
+        <input type="file" id="analyzeFile" accept=".csv" />
+        <button id="analyzeBtn">Analyze</button>
+      </div>
+      <div id="advisory" class="panel" style="margin-top:12px"></div>
+      <div class="grid" style="margin-top:12px">
+        <div class="panel">
+          <h3>Revenue Over Time</h3>
+          <canvas id="revChart"></canvas>
+        </div>
+        <div class="panel">
+          <h3>Top Products (Revenue)</h3>
+          <canvas id="topChart"></canvas>
+        </div>
+      </div>
+      <div class="grid" style="margin-top:12px">
+        <div class="panel">
+          <h3>Rating Distribution</h3>
+          <canvas id="ratingChart"></canvas>
+        </div>
+        <div class="panel">
+          <h3>Key Stats</h3>
+          <div id="stats"></div>
+        </div>
+      </div>
+      <div class="panel" style="margin-top:12px">
+        <h3>Trending Products (last 7 vs prev 7)</h3>
+        <table class="table" id="trendTable">
+          <thead><tr><th>Product</th><th>Recent Units</th><th>Prev Units</th><th>Growth</th><th>Recent Revenue</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+// ==== Configure your deployed backend URL ====
+const BACKEND_URL = "https://YOUR-RENDER-APP.onrender.com"; // CHANGE after you deploy backend
+
+const trainBtn = document.getElementById('trainBtn');
+const analyzeBtn = document.getElementById('analyzeBtn');
+const trainResult = document.getElementById('trainResult');
+const advisoryDiv = document.getElementById('advisory');
+const statsDiv = document.getElementById('stats');
+
+let revChart = null, topChart = null, ratingChart = null;
+
+function ensureChartDestroyed(chart) { if (chart) chart.destroy(); }
+
+function renderRevenueChart(data){
+  const ctx = document.getElementById('revChart').getContext('2d');
+  ensureChartDestroyed(revChart);
+  const labels = data.dates;
+  const datasets = [{
+    label: 'Revenue',
+    data: data.revenue,
+    borderWidth: 2,
+    fill: false,
+    tension: 0.2
+  }];
+  for (const [name, series] of Object.entries(data.moving_averages || {})) {
+    datasets.push({
+      label: name.toUpperCase(),
+      data: series,
+      borderWidth: 1,
+      borderDash: [5, 4],
+      fill: false,
+      tension: 0.2
+    });
+  }
+  // anomalies
+  const pts = labels.map((d,i)=> data.anomalies[i]===1 ? {x: d, y: data.revenue[i]} : null).filter(Boolean);
+  if (pts.length){
+    datasets.push({type:'scatter',label:'Anomalies',data:pts,pointRadius:4});
+  }
+  // forecast
+  if (data.forecast && data.forecast.future_dates){
+    datasets.push({
+      label:'Forecast',
+      data: new Array(labels.length-1).fill(null).concat([data.revenue[data.revenue.length-1]]),
+      borderWidth:1,
+      borderDash:[3,3]
+    });
+    // simple extension line
+    datasets.push({
+      label:'Forecast Next',
+      data:data.forecast.predictions,
+      parsing:false,
+      borderWidth:2,
+      fill:false
+    });
+  }
+  revChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      interaction:{mode:'index', intersect:false},
+      plugins:{ legend:{position:'top'}, title:{display:true, text:'Revenue & MAs'} },
+      scales:{ x:{display:true, ticks:{autoSkip:true,maxRotation:0}}, y:{display:true} }
+    }
+  });
+}
+
+function renderTopProductsChart(items){
+  const ctx = document.getElementById('topChart').getContext('2d');
+  ensureChartDestroyed(topChart);
+  const labels = items.map(r => r.product_name || r.product_id || '—');
+  const values = items.map(r => r.revenue);
+  topChart = new Chart(ctx, {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Revenue', data: values }]},
+    options:{ responsive:true, maintainAspectRatio:false, scales:{y:{beginAtZero:true}}}
+  });
+}
+
+function renderRatingChart(hist){
+  const ctx = document.getElementById('ratingChart').getContext('2d');
+  ensureChartDestroyed(ratingChart);
+  if(!hist){ 
+    ratingChart = new Chart(ctx, { type:'bar', data:{labels:['No ratings'], datasets:[{label:'Count', data:[0]}]}});
+    return;
+  }
+  ratingChart = new Chart(ctx, {
+    type:'bar',
+    data:{ labels: hist.bins, datasets:[{label:'Count', data: hist.counts}] },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{y:{beginAtZero:true}}}
+  });
+}
+
+function showStats(stats){
+  statsDiv.innerHTML = `
+    <p><span class="badge">Total Revenue</span> ₹${stats.total_revenue.toFixed(2)}</p>
+    <p><span class="badge">Total Units</span> ${stats.total_units.toFixed(0)}</p>
+    <p><span class="badge">Avg Price</span> ₹${stats.avg_price.toFixed(2)}</p>
+    <p><span class="badge">Days</span> ${stats.days}</p>
+    <p><span class="badge">Volatility</span> ${(stats.volatility*100).toFixed(2)}%</p>
+    <p><span class="badge">Trend slope</span> ${stats.trend_slope.toExponential(3)}</p>
+    <p><span class="badge">Anomaly rate</span> ${(stats.anomaly_rate*100).toFixed(2)}%</p>
+  `;
+}
+
+function renderTrendingTable(rows){
+  const tbody = document.querySelector('#trendTable tbody');
+  tbody.innerHTML = '';
+  rows.forEach(r=>{
+    const name = r.product_name || r.product_id || '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${name}</td>
+      <td>${(r.u_recent||0).toFixed(0)}</td>
+      <td>${(r.u_prev||0).toFixed(0)}</td>
+      <td>${((r.growth||0)*100).toFixed(1)}%</td>
+      <td>₹${(r.revenue_recent||0).toFixed(2)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+trainBtn.addEventListener('click', async ()=>{
+  const file = document.getElementById('trainFile').files[0];
+  if(!file){ trainResult.textContent = "Please choose a CSV."; return; }
+  trainResult.textContent = "Training...";
+  const fd = new FormData();
+  fd.append('file', file);
+  const add = (id, key)=>{
+    const v = document.getElementById(id).value.trim();
+    if(v) fd.append(key, v);
+  };
+  add('dateCol','date_col'); add('priceCol','price_col'); add('unitsCol','units_col');
+  add('pidCol','product_id_col'); add('pnameCol','product_name_col'); add('ratingCol','rating_col');
+  try{
+    const res = await fetch(`${BACKEND_URL}/train`, {method:'POST', body: fd});
+    const data = await res.json();
+    trainResult.textContent = JSON.stringify(data, null, 2);
+  }catch(e){
+    trainResult.textContent = "Error: " + e.message;
+  }
+});
+
+analyzeBtn.addEventListener('click', async ()=>{
+  const file = document.getElementById('analyzeFile').files[0];
+  if(!file){ advisoryDiv.textContent = "Please choose a CSV."; return; }
+  advisoryDiv.textContent = "Analyzing...";
+  const fd = new FormData(); fd.append('file', file);
+  try{
+    const res = await fetch(`${BACKEND_URL}/analyze`, {method:'POST', body: fd});
+    const data = await res.json();
+    if(data.error){ advisoryDiv.textContent = "Error: " + data.error; return; }
+    // Advisory
+    advisoryDiv.innerHTML = "<strong>Advisory:</strong><br>" + (data.advisory||[]).map((a,i)=> (i+1)+". "+a).join("<br>");
+    // Charts / Tables
+    renderRevenueChart(data.chartData);
+    renderTopProductsChart(data.topProducts||[]);
+    renderRatingChart(data.ratingHistogram||null);
+    showStats(data.basic_stats);
+    renderTrendingTable(data.trendingProducts||[]);
+  }catch(e){
+    advisoryDiv.textContent = "Error: " + e.message;
+  }
+});
+</script>
+</body>
+</html>
