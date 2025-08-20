@@ -360,8 +360,8 @@ canvas:hover {
   }
 }
 @keyframes loading {
-  0% { left: -100%; }
-  100% { left: 100%; }
+ 0% { left: -100%; }
+ 100% { left: 100%; }
 }
 .pulse {
   animation: pulse 2s infinite;
@@ -599,10 +599,8 @@ canvas:hover {
 
 <script>
 // ==== Configure your deployed backend URL ====
-// Try these common Render URL patterns if yours doesn't work
-const BACKEND_URLS = ["https://sales-analysis-backend-onqk.onrender.com"];
-
-let CURRENT_BACKEND_URL = BACKEND_URLS[0];
+// Replace with your actual Render backend URL
+const BACKEND_URL = "https://sales-analysis-backend-onqk.onrender.com";
 
 const trainBtn = document.getElementById('trainBtn');
 const analyzeBtn = document.getElementById('analyzeBtn');
@@ -623,10 +621,10 @@ function ensureChartDestroyed(chart) {
 function showError(message) {
   errorText.textContent = message;
   errorDiv.style.display = 'block';
-  // Hide after 5 seconds
+  // Hide after 8 seconds
   setTimeout(() => {
     errorDiv.style.display = 'none';
-  }, 5000);
+  }, 8000);
 }
 
 function hideError() {
@@ -715,7 +713,7 @@ function renderRevenueChart(data){
         title: { display: true, text: 'Revenue & Moving Averages', color: '#1e293b' } 
       },
       scales: { 
-        x: {
+              x: {
           display: true, 
           ticks: { color: '#64748b', autoSkip: true, maxRotation: 0 },
           grid: { color: 'rgba(100, 116, 139, 0.1)' }
@@ -819,8 +817,6 @@ function renderRatingChart(hist){
           }
         },
         plugins: {
-          legend: { display: false },
-          title: { display: true, text: 'Rating Distribution', color: '#1e293b' }
         }
       }
     });
@@ -947,19 +943,14 @@ trainBtn.addEventListener('click', async () => {
   add('ratingCol','rating_col');
   
   try {
-    const res = await fetch(`${CURRENT_BACKEND_URL}/train`, {method: 'POST', body: fd});
-    
-    if (!res.ok) {
-      throw new Error(`Server returned ${res.status}: ${res.statusText}`);
-    }
-    
-    const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await res.text();
-      throw new Error(`Expected JSON but got: ${text.substring(0, 100)}...`);
-    }
+    const res = await fetch(`${BACKEND_URL}/train`, {method: 'POST', body: fd});
     
     const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.error || `Server returned ${res.status}`);
+    }
+    
     trainResult.textContent = JSON.stringify(data, null, 2);
     
     // Show success message
@@ -993,19 +984,13 @@ analyzeBtn.addEventListener('click', async () => {
   fd.append('file', file);
   
   try {
-    const res = await fetch(`${CURRENT_BACKEND_URL}/analyze`, {method: 'POST', body: fd});
-    
-    if (!res.ok) {
-      throw new Error(`Server returned ${res.status}: ${res.statusText}`);
-    }
-    
-    const contentType = res.headers.get('content-type');
-    if (!contentType || !contentType.includes('application/json')) {
-      const text = await res.text();
-      throw new Error(`Expected JSON but got: ${text.substring(0, 100)}...`);
-    }
+    const res = await fetch(`${BACKEND_URL}/analyze`, {method: 'POST', body: fd});
     
     const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.error || `Server returned ${res.status}`);
+    }
     
     if(data.error){ 
       showError("Analysis error: " + data.error);
@@ -1041,7 +1026,7 @@ analyzeBtn.addEventListener('click', async () => {
 // Test backend connection on load
 async function testBackendConnection() {
   try {
-    const res = await fetch(`${CURRENT_BACKEND_URL}/health`, {
+    const res = await fetch(`${BACKEND_URL}/health`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json'
@@ -1051,24 +1036,12 @@ async function testBackendConnection() {
     if (res.ok) {
       console.log("Backend connection successful");
     } else {
-      console.warn("Backend health check failed, trying alternatives...");
-      // Try alternative URLs
-      for (let i = 1; i < BACKEND_URLS.length; i++) {
-        try {
-          const altRes = await fetch(`${BACKEND_URLS[i]}/health`);
-          if (altRes.ok) {
-            CURRENT_BACKEND_URL = BACKEND_URLS[i];
-            console.log(`Connected to alternative backend: ${CURRENT_BACKEND_URL}`);
-            break;
-          }
-        } catch (e) {
-          console.warn(`Backend ${BACKEND_URLS[i]} failed: ${e.message}`);
-        }
-      }
+      console.warn("Backend health check failed");
+      showError("Backend server is not responding properly. Please check if your backend is running.");
     }
   } catch (e) {
     console.error("Backend connection test failed:", e.message);
-    showError("Cannot connect to backend server. Please check your internet connection and try again.");
+    showError("Cannot connect to backend server. Please check your internet connection and make sure the backend URL is correct.");
   }
 }
 
