@@ -479,6 +479,34 @@ canvas:hover {
     opacity: 0;
   }
 }
+.error-panel {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--danger);
+  padding: 16px;
+  border-radius: var(--radius);
+  margin-top: 16px;
+}
+.error-panel h4 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.success-panel {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: var(--success);
+  padding: 16px;
+  border-radius: var(--radius);
+  margin-top: 16px;
+}
+.success-panel h4 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
 </style>
 </head>
 <body>
@@ -535,6 +563,10 @@ canvas:hover {
         <button id="analyzeBtn" class="ripple"><i class="fas fa-chart-bar"></i> Analyze</button>
       </div>
       <div id="advisory" class="panel" style="margin-top:20px"></div>
+      <div id="errorMessage" style="display: none;" class="error-panel">
+        <h4><i class="fas fa-exclamation-circle"></i> Server Error</h4>
+        <p id="errorText"></p>
+      </div>
       <div class="grid" style="margin-top:20px">
         <div class="panel">
           <h3><i class="fas fa-money-bill-wave"></i> Revenue Over Time</h3>
@@ -567,13 +599,18 @@ canvas:hover {
 
 <script>
 // ==== Configure your deployed backend URL ====
-const BACKEND_URL = "https://sales-analysis-backend-onqk.onrender.com";
+// Try these common Render URL patterns if yours doesn't work
+const BACKEND_URLS = ["https://sales-analysis-backend-onqk.onrender.com"];
+
+let CURRENT_BACKEND_URL = BACKEND_URLS[0];
 
 const trainBtn = document.getElementById('trainBtn');
 const analyzeBtn = document.getElementById('analyzeBtn');
 const trainResult = document.getElementById('trainResult');
 const advisoryDiv = document.getElementById('advisory');
 const statsDiv = document.getElementById('stats');
+const errorDiv = document.getElementById('errorMessage');
+const errorText = document.getElementById('errorText');
 
 let revChart = null, topChart = null, ratingChart = null;
 
@@ -581,6 +618,19 @@ function ensureChartDestroyed(chart) {
   if (chart) {
     chart.destroy();
   }
+}
+
+function showError(message) {
+  errorText.textContent = message;
+  errorDiv.style.display = 'block';
+  // Hide after 5 seconds
+  setTimeout(() => {
+    errorDiv.style.display = 'none';
+  }, 5000);
+}
+
+function hideError() {
+  errorDiv.style.display = 'none';
 }
 
 function renderRevenueChart(data){
@@ -875,14 +925,13 @@ function renderTrendingTable(rows){
 trainBtn.addEventListener('click', async () => {
   const file = document.getElementById('trainFile').files[0];
   if(!file){ 
-    trainResult.textContent = "Please choose a CSV.";
-    trainResult.classList.add('loading');
-    setTimeout(() => trainResult.classList.remove('loading'), 1500);
+    showError("Please choose a CSV file to train the model.");
     return; 
   }
   
   trainResult.textContent = "Training...";
   trainResult.classList.add('loading');
+  hideError();
   
   const fd = new FormData();
   fd.append('file', file);
@@ -898,7 +947,8 @@ trainBtn.addEventListener('click', async () => {
   add('ratingCol','rating_col');
   
   try {
-    const res = await fetch(`${BACKEND_URL}/train`, {method: 'POST', body: fd});
+    const res = await fetch(`${CURRENT_BACKEND_URL}/train`, {method: 'POST', body: fd});
+    
     if (!res.ok) {
       throw new Error(`Server returned ${res.status}: ${res.statusText}`);
     }
@@ -911,9 +961,19 @@ trainBtn.addEventListener('click', async () => {
     
     const data = await res.json();
     trainResult.textContent = JSON.stringify(data, null, 2);
-    trainResult.classList.remove('loading');
+    
+    // Show success message
+    advisoryDiv.innerHTML = `
+      <div class="success-panel">
+        <h4><i class="fas fa-check-circle"></i> Model Trained Successfully</h4>
+        <p>Your model has been trained and is ready for analysis.</p>
+      </div>
+    `;
+    
   } catch(e) {
+    showError("Training failed: " + e.message);
     trainResult.textContent = "Error: " + e.message;
+  } finally {
     trainResult.classList.remove('loading');
   }
 });
@@ -921,20 +981,19 @@ trainBtn.addEventListener('click', async () => {
 analyzeBtn.addEventListener('click', async () => {
   const file = document.getElementById('analyzeFile').files[0];
   if(!file){ 
-    advisoryDiv.textContent = "Please choose a CSV.";
-    advisoryDiv.classList.add('loading');
-    setTimeout(() => advisoryDiv.classList.remove('loading'), 1500);
+    showError("Please choose a CSV file to analyze.");
     return; 
   }
   
   advisoryDiv.textContent = "Analyzing...";
   advisoryDiv.classList.add('loading');
+  hideError();
   
   const fd = new FormData(); 
   fd.append('file', file);
   
   try {
-    const res = await fetch(`${BACKEND_URL}/analyze`, {method: 'POST', body: fd});
+    const res = await fetch(`${CURRENT_BACKEND_URL}/analyze`, {method: 'POST', body: fd});
     
     if (!res.ok) {
       throw new Error(`Server returned ${res.status}: ${res.statusText}`);
@@ -949,8 +1008,7 @@ analyzeBtn.addEventListener('click', async () => {
     const data = await res.json();
     
     if(data.error){ 
-      advisoryDiv.textContent = "Error: " + data.error; 
-      advisoryDiv.classList.remove('loading');
+      showError("Analysis error: " + data.error);
       return; 
     }
     
@@ -965,7 +1023,6 @@ analyzeBtn.addEventListener('click', async () => {
         `).join('')}
       </div>
     `;
-    advisoryDiv.classList.remove('loading');
     
     // Charts / Tables
     renderRevenueChart(data.chartData);
@@ -975,10 +1032,48 @@ analyzeBtn.addEventListener('click', async () => {
     renderTrendingTable(data.trendingProducts||[]);
     
   } catch(e) {
-    advisoryDiv.textContent = "Error: " + e.message;
+    showError("Analysis failed: " + e.message);
+  } finally {
     advisoryDiv.classList.remove('loading');
   }
 });
+
+// Test backend connection on load
+async function testBackendConnection() {
+  try {
+    const res = await fetch(`${CURRENT_BACKEND_URL}/health`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (res.ok) {
+      console.log("Backend connection successful");
+    } else {
+      console.warn("Backend health check failed, trying alternatives...");
+      // Try alternative URLs
+      for (let i = 1; i < BACKEND_URLS.length; i++) {
+        try {
+          const altRes = await fetch(`${BACKEND_URLS[i]}/health`);
+          if (altRes.ok) {
+            CURRENT_BACKEND_URL = BACKEND_URLS[i];
+            console.log(`Connected to alternative backend: ${CURRENT_BACKEND_URL}`);
+            break;
+          }
+        } catch (e) {
+          console.warn(`Backend ${BACKEND_URLS[i]} failed: ${e.message}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error("Backend connection test failed:", e.message);
+    showError("Cannot connect to backend server. Please check your internet connection and try again.");
+  }
+}
+
+// Test connection when page loads
+window.addEventListener('load', testBackendConnection);
 </script>
 </body>
 </html>
