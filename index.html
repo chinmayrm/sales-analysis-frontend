@@ -442,11 +442,23 @@ const statsDiv = document.getElementById('stats');
 
 let revChart = null, topChart = null, ratingChart = null;
 
-function ensureChartDestroyed(chart) { if (chart) chart.destroy(); }
+function ensureChartDestroyed(chart, canvasId) {
+  if (chart) {
+    chart.destroy();
+    // Optionally clear the canvas
+    const canvas = document.getElementById(canvasId);
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+}
 
 function renderRevenueChart(data){
-  const ctx = document.getElementById('revChart').getContext('2d');
-  ensureChartDestroyed(revChart);
+  const canvas = document.getElementById('revChart');
+  if (!canvas) return;
+  ensureChartDestroyed(revChart, 'revChart');
+  const ctx = canvas.getContext('2d');
   const labels = data.dates;
   const datasets = [{
     label: 'Revenue',
@@ -527,8 +539,10 @@ function renderRevenueChart(data){
 }
 
 function renderTopProductsChart(items){
-  const ctx = document.getElementById('topChart').getContext('2d');
-  ensureChartDestroyed(topChart);
+  const canvas = document.getElementById('topChart');
+  if (!canvas) return;
+  ensureChartDestroyed(topChart, 'topChart');
+  const ctx = canvas.getContext('2d');
   const labels = items.map(r => r.product_name || r.product_id || '—');
   const values = items.map(r => r.revenue);
   
@@ -567,8 +581,10 @@ function renderTopProductsChart(items){
 }
 
 function renderRatingChart(hist){
-  const ctx = document.getElementById('ratingChart').getContext('2d');
-  ensureChartDestroyed(ratingChart);
+  const canvas = document.getElementById('ratingChart');
+  if (!canvas) return;
+  ensureChartDestroyed(ratingChart, 'ratingChart');
+  const ctx = canvas.getContext('2d');
   if(!hist){ 
     ratingChart = new Chart(ctx, { 
       type:'bar', 
