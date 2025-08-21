@@ -167,15 +167,23 @@ pre:hover {
 .panel:hover {
   border-color: var(--accent);
 }
+.chart-scroll-x {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.chart-scroll-x canvas {
+  min-width: 700px;
+  max-width: 2000px;
+  width: 1200px;
+  height: 360px;
+  display: block;
+}
 canvas{
   background:var(--bg);
   border:1px solid var(--border);
   border-radius:10px;
   padding:12px;
-  height:360px;
-  width:100%;
-  max-width: 100%;
-  min-width: 300px;
   box-sizing: border-box;
   transition: var(--transition);
   display: block;
@@ -408,17 +416,23 @@ canvas:hover {
       <div class="grid" style="margin-top:16px">
         <div class="panel">
           <h3><i class="fas fa-money-bill-wave"></i> Revenue Over Time</h3>
-          <canvas id="revChart"></canvas>
+          <div class="chart-scroll-x">
+            <canvas id="revChart"></canvas>
+          </div>
         </div>
         <div class="panel">
           <h3><i class="fas fa-trophy"></i> Top Products (Revenue)</h3>
-          <canvas id="topChart"></canvas>
+          <div class="chart-scroll-x">
+            <canvas id="topChart"></canvas>
+          </div>
         </div>
       </div>
       <div class="grid" style="margin-top:16px">
         <div class="panel">
           <h3><i class="fas fa-star"></i> Rating Distribution</h3>
-          <canvas id="ratingChart"></canvas>
+          <div class="chart-scroll-x">
+            <canvas id="ratingChart"></canvas>
+          </div>
         </div>
         <div class="panel">
           <h3><i class="fas fa-chart-pie"></i> Key Stats</h3>
@@ -463,6 +477,9 @@ function renderRevenueChart(data){
   const canvas = document.getElementById('revChart');
   if (!canvas) return;
   ensureChartDestroyed(revChart, 'revChart');
+  // Dynamically set canvas width based on data length
+  canvas.width = Math.max(700, data.dates.length * 40);
+  canvas.height = 360;
   const ctx = canvas.getContext('2d');
   const labels = data.dates;
   const datasets = [{
@@ -547,6 +564,8 @@ function renderTopProductsChart(items){
   const canvas = document.getElementById('topChart');
   if (!canvas) return;
   ensureChartDestroyed(topChart, 'topChart');
+  canvas.width = 900;
+  canvas.height = 360;
   const ctx = canvas.getContext('2d');
   const labels = items.map(r => r.product_name || r.product_id || '—');
   const values = items.map(r => r.revenue);
@@ -589,6 +608,8 @@ function renderRatingChart(hist){
   const canvas = document.getElementById('ratingChart');
   if (!canvas) return;
   ensureChartDestroyed(ratingChart, 'ratingChart');
+  canvas.width = 700;
+  canvas.height = 360;
   const ctx = canvas.getContext('2d');
   if(!hist){ 
     ratingChart = new Chart(ctx, { 
