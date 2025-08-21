@@ -413,6 +413,7 @@ canvas:hover {
         <button id="analyzeBtn"><i class="fas fa-chart-bar"></i> Analyze</button>
       </div>
       <div id="advisory" class="panel" style="margin-top:16px"></div>
+      <!-- Revenue Over Time -->
       <div class="grid" style="margin-top:16px">
         <div class="panel">
           <h3><i class="fas fa-money-bill-wave"></i> Revenue Over Time</h3>
@@ -420,6 +421,9 @@ canvas:hover {
             <canvas id="revChart"></canvas>
           </div>
         </div>
+      </div>
+      <!-- Top Products (Revenue) moved below Revenue Over Time -->
+      <div class="grid" style="margin-top:16px">
         <div class="panel">
           <h3><i class="fas fa-trophy"></i> Top Products (Revenue)</h3>
           <div class="chart-scroll-x">
@@ -427,13 +431,16 @@ canvas:hover {
           </div>
         </div>
       </div>
+      <!-- Rating Distribution, then Key Stats below it -->
       <div class="grid" style="margin-top:16px">
-        <div class="panel">
+        <div class="panel" style="margin-bottom:0;">
           <h3><i class="fas fa-star"></i> Rating Distribution</h3>
           <div class="chart-scroll-x">
             <canvas id="ratingChart"></canvas>
           </div>
         </div>
+      </div>
+      <div class="grid" style="margin-top:0;">
         <div class="panel">
           <h3><i class="fas fa-chart-pie"></i> Key Stats</h3>
           <div id="stats" class="stats-container"></div>
